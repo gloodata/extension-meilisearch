@@ -3,8 +3,10 @@ import glob
 import pathlib
 
 import frontmatter
+import toml
+import yaml
 from marko import Markdown
-from marko.block import Document, Heading
+from marko.block import Document, Heading, FencedCode
 from marko.ext.gfm import GFM
 from marko.md_renderer import MarkdownRenderer
 
@@ -37,10 +39,11 @@ def items_to_md(md, childs):
 def process_file(md, file_path):
     items = []
     title = None
+    metadata = None
     body = []
     with open(file_path, "r", encoding="utf-8") as file:
         full_content = file.read()
-        metadata, content = frontmatter.parse(full_content)
+        base_metadata, content = frontmatter.parse(full_content)
         # Process the markdown content
         doc = md.parse(content)
         for node in doc.children:
@@ -48,10 +51,25 @@ def process_file(md, file_path):
                 if title:
                     item = Item(title, items_to_md(md, body), metadata)
                     items.append(item)
+
+                metadata = dict(base_metadata)
                 title = items_to_md(md, node.children)
                 body = []
             else:
-                body.append(node)
+                if (
+                    isinstance(node, FencedCode)
+                    and node.lang == "toml"
+                    and node.extra == "metadata"
+                ):
+                    metadata.update(toml.loads(node.children[0].children))
+                elif (
+                    isinstance(node, FencedCode)
+                    and node.lang == "yaml"
+                    and node.extra == "metadata"
+                ):
+                    metadata.update(yaml.safe_load(node.children[0].children))
+                else:
+                    body.append(node)
 
         if title:
             item = Item(title, items_to_md(md, body), metadata)
