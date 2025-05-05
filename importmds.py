@@ -1,18 +1,46 @@
+import os
 import argparse
-import glob
 import pathlib
 
-import frontmatter
 import toml
 import yaml
+import meilisearch
+from slugify import slugify
+import frontmatter
+
 from marko import Markdown
 from marko.block import Document, Heading, FencedCode
 from marko.ext.gfm import GFM
 from marko.md_renderer import MarkdownRenderer
 
 
+def ensure_index_exists(client, index_uid, primary_key="id"):
+    try:
+        client.get_index(index_uid)
+    except meilisearch.errors.MeilisearchApiError as err:
+        if err.code == "index_not_found":
+            client.create_index(index_uid, {"primaryKey": primary_key})
+        else:
+            raise err
+
+    return client.index(index_uid)
+
+
+def make_client_and_index(url, master_key, index_name):
+    client = meilisearch.Client(url, master_key)
+    index = ensure_index_exists(client, index_name)
+    return client, index
+
+
+def get_client_and_index(url, master_key, index_name):
+    client = meilisearch.Client(url, master_key)
+    index = client.index(index_name)
+    return client, index
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Process markdown files.")
+    parser.add_argument("base_path", help="Root path for glob pattern")
     parser.add_argument("glob_pattern", help="Glob pattern to match markdown files")
     return parser.parse_args()
 
@@ -44,7 +72,7 @@ def process_file(md, file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         full_content = file.read()
         base_metadata, content = frontmatter.parse(full_content)
-        # Process the markdown content
+
         doc = md.parse(content)
         for node in doc.children:
             if isinstance(node, Heading) and node.level == 1:
@@ -78,10 +106,10 @@ def process_file(md, file_path):
     return items
 
 
-def process_files(glob_pattern):
+def process_files(base_path, glob_pattern):
     md = Markdown(extensions=[GFM], renderer=MarkdownRenderer)
     groups = []
-    for file_path in glob.glob(glob_pattern):
+    for file_path in pathlib.Path(base_path).glob(glob_pattern):
         items = process_file(md, file_path)
         group = ItemGroup(file_path, items)
         groups.append(group)
@@ -90,13 +118,23 @@ def process_files(glob_pattern):
 
 
 if __name__ == "__main__":
+    ms_url = os.environ.get("MS_URL", "http://127.0.0.1:7700")
+    ms_key = os.environ.get("MS_MASTER_KEY", "")
+    ms_index = os.environ.get("MS_INDEX_NAME", "SearchIndex")
+
+    client, index = make_client_and_index(ms_url, ms_key, ms_index)
+
     args = parse_args()
-    groups = process_files(args.glob_pattern)
+    groups = process_files(args.base_path, args.glob_pattern)
+    entries = []
     for group in groups:
-        file_base_name = pathlib.Path(group.path).stem
-        print(f"File: {file_base_name}")
+        file_name = os.path.relpath(group.path, args.base_path)
+        print(f"File: {file_name}")
         for item in group.items:
-            print("-" * 40)
-            print(f"Title: {item.title}")
-            print(f"Body: {item.body}")
-            print(f"Metadata: {item.metadata}")
+            id = slugify(f"{file_name}:{item.title}")
+            entry = dict(item.metadata)
+            entry.update(id=id, title=item.title, body=item.body)
+            entries.append(entry)
+
+    print(f"inserting {len(entries)} entries")
+    print(index.add_documents(entries))

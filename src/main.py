@@ -1,6 +1,3 @@
-def main():
-    print("Hello from extension-meilisearch!")
+from toolbox import tb
 
-
-if __name__ == "__main__":
-    main()
+tb.serve_from_env_or(default_port=9876)
