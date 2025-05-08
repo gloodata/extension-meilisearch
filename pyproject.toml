@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.2.2",
     "fastapi>=0.115.12",
     "glootil>=0.2.2",
     "marko>=2.1.3",

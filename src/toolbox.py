@@ -1,8 +1,11 @@
 import os
+from datetime import date
 
 import meilisearch
 
-from glootil import Toolbox
+from glootil import Toolbox, DynEnum
+
+from slackdb import SlackDB
 
 
 class State:
@@ -13,22 +16,55 @@ class State:
     def setup(self):
         ms_url = os.environ.get("MS_URL", "http://127.0.0.1:7700")
         ms_key = os.environ.get("MS_MASTER_KEY", "")
-        ms_index = os.environ.get("MS_INDEX_NAME", "SearchIndex")
+        ms_index = os.environ.get("MS_INDEX_NAME", "SlackTreads")
+
+        slack_data_dir = os.environ.get("SLACK_DATA_DIR", "./slack_archive/")
+
+        # it's a sync client but we are only load things at startup
+        # or do simple queries that should be fast
+        slack_db = SlackDB(slack_data_dir)
+        slack_db.initialize()
 
         client = meilisearch.Client(ms_url, ms_key)
         index = client.index(ms_index)
 
         self.client = client
         self.index = index
+        self.slack_db = slack_db
+
+    def get_all_channels(self):
+        return self.slack_db.get_all_channels()
+
+    def get_all_users(self):
+        return self.slack_db.get_all_users()
+
+    def find_users_like(self, query, limit):
+        return self.slack_db.find_users_like(query, limit)
 
 
 tb = Toolbox("gd-meilisearch", "Meilisearch", "Hybrid Search Tools", state=State())
 
 
+@tb.enum(icon="hashtag")
+class Channel(DynEnum):
+    @staticmethod
+    def load(state: State):
+        return state.get_all_channels()
+
+
+@tb.enum(icon="user")
+class User(DynEnum):
+    @staticmethod
+    def search(state: State, query: str = "", limit: int = 100):
+        return state.find_users_like(query, limit)
+
+
 def hit_to_search_item(hit):
+    date = hit.get("date")
     title = hit.get("title", "")
-    body = hit.get("body", "")
-    return {"type": "Post", "title": title, "body": body}
+    body = hit.get("content", "")
+
+    return {"type": "Post", "format": "md", "title": title, "body": body, "date": date}
 
 
 @tb.task
@@ -43,11 +79,25 @@ SEARCH_HANDLER_ID = tb.handler_id_for_task(search_handler)
 
 @tb.tool(
     name="Search",
-    args={"query": "Query"},
+    args={
+        "query": "Query",
+        "date_start": "From",
+        "date_end": "To",
+        "channel": "Channel",
+        "user": "User",
+    },
     examples=["Search for something", "Search for something else"],
 )
-def buscar_faq(query: str = ""):
+def search(
+    state: State,
+    date_start: date | None,
+    date_end: date | None,
+    channel: Channel | None,
+    user: User | None,
+    query: str = "",
+):
     "Search in Meilisearch"
+    print(date_start, date_end, channel, user, query)
     return {
         "type": "Search",
         "placeholder": "Search Query",
@@ -55,6 +105,3 @@ def buscar_faq(query: str = ""):
         "searchType": "submit",
         "searchHandlerName": SEARCH_HANDLER_ID,
     }
-
-
-tb.serve(host="127.0.0.1", port=8089)

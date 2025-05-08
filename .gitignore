@@ -4,3 +4,4 @@ __pycache__
 /meilisearch
 /ms-config.toml
 /.env
+/slack_archive
