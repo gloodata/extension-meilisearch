@@ -56,7 +56,9 @@ class Channel(DynEnum):
 class User(DynEnum):
     @staticmethod
     def search(state: State, query: str = "", limit: int = 100):
-        return state.find_users_like(query, limit)
+        return [
+            (r["id"], r["display_name"]) for r in state.find_users_like(query, limit)
+        ]
 
 
 def hit_to_search_item(hit):

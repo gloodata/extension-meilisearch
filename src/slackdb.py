@@ -139,7 +139,7 @@ class SlackDB(DuckStore):
         """Return a list of tuples containing user IDs and names."""
         return self.query_all(
             """
-            SELECT id, COALESCE(display_name, real_name, name) as name
+            SELECT id, COALESCE(NULLIF(display_name, ''), NULLIF(real_name, ''), NULLIF(name, ''), id) as name
             FROM users
             WHERE is_deleted = false
             ORDER BY name
@@ -163,7 +163,7 @@ class SlackDB(DuckStore):
         """Get user details by ID."""
         return self.query_one(
             """
-                    SELECT id, name, real_name, COALESCE(display_name, real_name, name) as display_name, is_bot, is_deleted, email
+                    SELECT id, name, real_name, display_name, is_bot, is_deleted, email
                     FROM users
                     WHERE id = $user_id
                 """,
@@ -180,7 +180,7 @@ class SlackDB(DuckStore):
                 id,
                 name,
                 real_name,
-                COALESCE(display_name, real_name, name) as display_name,
+                COALESCE(NULLIF(display_name, ''), NULLIF(real_name, ''), NULLIF(name, ''), id) as display_name,
                 is_bot,
                 is_deleted,
                 email
