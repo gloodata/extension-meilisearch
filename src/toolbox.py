@@ -32,11 +32,11 @@ class State:
         self.index = index
         self.slack_db = slack_db
 
-    def get_all_channels(self):
-        return self.slack_db.get_all_channels()
+    def get_all_channels(self, as_dict=True):
+        return self.slack_db.get_all_channels(as_dict)
 
-    def get_all_users(self):
-        return self.slack_db.get_all_users()
+    def get_all_users(self, as_dict=True):
+        return self.slack_db.get_all_users(as_dict)
 
     def find_users_like(self, query, limit):
         return self.slack_db.find_users_like(query, limit)
@@ -49,7 +49,7 @@ tb = Toolbox("gd-meilisearch", "Meilisearch", "Hybrid Search Tools", state=State
 class Channel(DynEnum):
     @staticmethod
     def load(state: State):
-        return state.get_all_channels()
+        return state.get_all_channels(as_dict=False)
 
 
 @tb.enum(icon="user")

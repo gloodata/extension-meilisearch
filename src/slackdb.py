@@ -1,7 +1,7 @@
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import duckdb
 
@@ -13,18 +13,29 @@ class DuckStore:
     def initialize(self):
         pass
 
-    def query_one(self, query: str, params: dict) -> Dict | None:
+    def query_one(self, query: str, params: dict, as_dict=True) -> Dict | Tuple | None:
         cursor = self.conn.sql(query, params=params)
         result = cursor.fetchone()
+
         if result:
-            return {key: value for key, value in zip(cursor.columns, result)}
+            if as_dict:
+                return {key: value for key, value in zip(cursor.columns, result)}
+
+            return result
+
         return None
 
-    def query_all(self, query: str, params: dict) -> List[Dict]:
+    def query_all(
+        self, query: str, params: dict, as_dict=True
+    ) -> List[Dict] | List[Tuple]:
         cursor = self.conn.sql(query, params=params)
         result = cursor.fetchall()
-        cols = cursor.columns
-        return [{key: value for key, value in zip(cols, row)} for row in result]
+
+        if as_dict:
+            cols = cursor.columns
+            return [{key: value for key, value in zip(cols, row)} for row in result]
+
+        return result
 
     def close(self):
         """Close the database connection."""
@@ -111,7 +122,7 @@ class SlackDB(DuckStore):
                 },
             )
 
-    def get_all_channels(self) -> List[Dict]:
+    def get_all_channels(self, as_dict=True) -> List[Dict] | List[Tuple]:
         """Return a list of tuples containing channel IDs and names."""
         return self.query_all(
             """
@@ -121,9 +132,10 @@ class SlackDB(DuckStore):
             ORDER BY name
         """,
             {},
+            as_dict=as_dict,
         )
 
-    def get_all_users(self) -> List[Dict]:
+    def get_all_users(self, as_dict=True) -> List[Dict] | List[Tuple]:
         """Return a list of tuples containing user IDs and names."""
         return self.query_all(
             """
@@ -133,6 +145,7 @@ class SlackDB(DuckStore):
             ORDER BY name
         """,
             {},
+            as_dict=as_dict,
         )
 
     def get_channel_by_id(self, channel_id: str) -> Dict | None:
